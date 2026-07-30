@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_export.dart';
+import '../../services/master_asset_registry_service.dart';
 import '../../services/supabase_service.dart';
 
 class AddBusinessScreen extends StatefulWidget {
@@ -165,6 +166,8 @@ class _AddBusinessScreenState extends State<AddBusinessScreen> {
       } else {
         await _client.from('businesses').insert(data);
       }
+      // Auto-register in Asset Intelligence
+      await MasterAssetRegistryService.instance.autoRegisterAllAssets();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

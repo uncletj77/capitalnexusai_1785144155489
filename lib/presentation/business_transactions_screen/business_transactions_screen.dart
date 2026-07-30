@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_export.dart';
+import '../../services/enterprise_transaction_service.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/cna_shared_components.dart';
 
@@ -59,6 +60,7 @@ class _BusinessTransactionsScreenState
             .from('business_transactions')
             .select()
             .eq('business_id', bizId)
+            .eq('is_archived', false)
             .order('transaction_date', ascending: false)
             .limit(100),
         _client.from('business_branches').select().eq('business_id', bizId),
@@ -178,7 +180,6 @@ class _BusinessTransactionsScreenState
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Type selector
                   Row(
                     children: ['revenue', 'expense'].map((t) {
                       final isSelected = txType == t;
@@ -187,12 +188,10 @@ class _BusinessTransactionsScreenState
                           : AppTheme.error;
                       return Expanded(
                         child: GestureDetector(
-                          onTap: () {
-                            setModalState(() {
-                              txType = t;
-                              categoryCtrl.clear();
-                            });
-                          },
+                          onTap: () => setModalState(() {
+                            txType = t;
+                            categoryCtrl.clear();
+                          }),
                           child: Container(
                             margin: EdgeInsets.only(
                               right: t == 'revenue' ? 6 : 0,
@@ -201,18 +200,13 @@ class _BusinessTransactionsScreenState
                             decoration: BoxDecoration(
                               color: isSelected
                                   ? color
-                                  : AppTheme.backgroundLight,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: isSelected
-                                    ? color
-                                    : AppTheme.outlineLight,
-                              ),
+                                  : AppTheme.surfaceVariantLight,
+                              borderRadius: BorderRadius.circular(12),
                             ),
                             child: Center(
                               child: Text(
                                 t.toUpperCase(),
-                                style: GoogleFonts.plusJakartaSans(
+                                style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                   color: isSelected
@@ -226,150 +220,108 @@ class _BusinessTransactionsScreenState
                       );
                     }).toList(),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   _sheetField(
-                    'Amount (TZS) *',
+                    'Amount (TSh) *',
                     amountCtrl,
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 10),
-                  Text(
-                    'Category',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.mutedLight,
+                  DropdownButtonFormField<String>(
+                    initialValue: cats.contains(categoryCtrl.text)
+                        ? categoryCtrl.text
+                        : cats.first,
+                    decoration: InputDecoration(
+                      labelText: 'Category',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: cats.map((c) {
-                      final isSelected = categoryCtrl.text == c;
-                      return GestureDetector(
-                        onTap: () {
-                          setModalState(() => categoryCtrl.text = c);
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? AppTheme.primary
-                                : AppTheme.backgroundLight,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: isSelected
-                                  ? AppTheme.primary
-                                  : AppTheme.outlineLight,
+                    items: cats
+                        .map(
+                          (c) => DropdownMenuItem(
+                            value: c,
+                            child: Text(
+                              c,
+                              style: const TextStyle(fontSize: 13),
                             ),
                           ),
-                          child: Text(
-                            c,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: isSelected
-                                  ? Colors.white
-                                  : AppTheme.mutedLight,
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                        )
+                        .toList(),
+                    onChanged: (v) => setModalState(
+                      () => categoryCtrl.text = v ?? cats.first,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   _sheetField('Description', descCtrl),
                   const SizedBox(height: 10),
                   _sheetField('Customer / Client', customerCtrl),
-                  const SizedBox(height: 10),
                   if (_branches.isNotEmpty) ...[
-                    Text(
-                      'Branch',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.mutedLight,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    DropdownButtonFormField<String>(
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String?>(
                       initialValue: selectedBranch,
                       decoration: InputDecoration(
-                        filled: true,
-                        fillColor: AppTheme.backgroundLight,
+                        labelText: 'Branch (optional)',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 10,
                         ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(color: AppTheme.outlineLight),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(color: AppTheme.outlineLight),
-                        ),
-                      ),
-                      hint: Text(
-                        'Select branch',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13,
-                          color: AppTheme.mutedLight,
-                        ),
                       ),
                       items: [
-                        const DropdownMenuItem(
+                        const DropdownMenuItem<String?>(
                           value: null,
-                          child: Text('No specific branch'),
+                          child: Text('No Branch'),
                         ),
                         ..._branches.map(
-                          (b) => DropdownMenuItem(
+                          (b) => DropdownMenuItem<String?>(
                             value: b['id'] as String,
-                            child: Text(b['name'] as String),
+                            child: Text(b['name'] as String? ?? 'Branch'),
                           ),
                         ),
                       ],
                       onChanged: (v) => setModalState(() => selectedBranch = v),
                     ),
-                    const SizedBox(height: 10),
                   ],
+                  const SizedBox(height: 10),
                   GestureDetector(
                     onTap: () async {
                       final picked = await showDatePicker(
                         context: ctx,
                         initialDate: selectedDate,
                         firstDate: DateTime(2020),
-                        lastDate: DateTime.now().add(const Duration(days: 30)),
+                        lastDate: DateTime.now(),
                       );
                       if (picked != null) {
                         setModalState(() => selectedDate = picked);
                       }
                     },
                     child: Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
-                        color: AppTheme.backgroundLight,
-                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: AppTheme.outlineLight),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
                         children: [
-                          const CustomIconWidget(
-                            iconName: 'calendar_today',
-                            color: AppTheme.mutedLight,
+                          const Icon(
+                            Icons.calendar_today,
                             size: 16,
+                            color: AppTheme.primary,
                           ),
                           const SizedBox(width: 8),
                           Text(
                             '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13,
-                              color: AppTheme.onSurfaceLight,
-                            ),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 13),
                           ),
                         ],
                       ),
@@ -380,42 +332,32 @@ class _BusinessTransactionsScreenState
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () async {
-                        final amt = double.tryParse(amountCtrl.text);
-                        if (amt == null || amt <= 0) return;
+                        final amount = double.tryParse(
+                          amountCtrl.text.replaceAll(',', ''),
+                        );
+                        if (amount == null || amount <= 0) return;
                         final category = categoryCtrl.text.isEmpty
-                            ? (txType == 'revenue'
-                                  ? 'Other Income'
-                                  : 'Other Expense')
+                            ? cats.first
                             : categoryCtrl.text;
-                        try {
-                          await _client.from('business_transactions').insert({
-                            'business_id': _activeBusiness!['id'],
-                            'branch_id': selectedBranch,
-                            'transaction_type': txType,
-                            'category': category,
-                            'amount': amt,
-                            'description': descCtrl.text.trim().isEmpty
-                                ? null
-                                : descCtrl.text.trim(),
-                            'customer_client': customerCtrl.text.trim().isEmpty
-                                ? null
-                                : customerCtrl.text.trim(),
-                            'transaction_date':
-                                '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}',
-                          });
-                          if (mounted) {
-                            Navigator.pop(ctx);
-                            _loadData();
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error: $e'),
-                                backgroundColor: AppTheme.error,
-                              ),
+                        final bizId = _activeBusiness!['id'] as String;
+                        await EnterpriseTransactionService.instance
+                            .createBusinessTransaction(
+                              businessId: bizId,
+                              type: txType,
+                              category: category,
+                              amount: amount,
+                              date: selectedDate,
+                              description: descCtrl.text.trim().isEmpty
+                                  ? null
+                                  : descCtrl.text.trim(),
+                              branchId: selectedBranch,
+                              customerClient: customerCtrl.text.trim().isEmpty
+                                  ? null
+                                  : customerCtrl.text.trim(),
                             );
-                          }
+                        if (mounted) {
+                          Navigator.pop(ctx);
+                          _loadData();
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -441,6 +383,197 @@ class _BusinessTransactionsScreenState
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _showEditTransactionSheet(Map<String, dynamic> tx) {
+    final amountCtrl = TextEditingController(
+      text: (tx['amount'] as num).toDouble().toStringAsFixed(0),
+    );
+    final descCtrl = TextEditingController(
+      text: tx['description'] as String? ?? '',
+    );
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheet) => Container(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+          ),
+          decoration: const BoxDecoration(
+            color: AppTheme.surfaceLight,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Edit Transaction',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (c) => AlertDialog(
+                                title: const Text('Delete Transaction'),
+                                content: const Text(
+                                  'This will delete the transaction and update all financial calculations.',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(c, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(c, true),
+                                    child: const Text(
+                                      'Delete',
+                                      style: TextStyle(color: Colors.red),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirmed == true) {
+                              await EnterpriseTransactionService.instance
+                                  .deleteBusinessTransaction(
+                                    tx['id'] as String,
+                                  );
+                              _loadData();
+                            }
+                          },
+                          icon: const Icon(
+                            Icons.delete,
+                            color: AppTheme.error,
+                            size: 20,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color:
+                        (tx['transaction_type'] == 'revenue'
+                                ? AppTheme.success
+                                : AppTheme.error)
+                            .withAlpha(20),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${(tx['transaction_type'] as String).toUpperCase()} • ${tx['category'] ?? ''}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: tx['transaction_type'] == 'revenue'
+                          ? AppTheme.success
+                          : AppTheme.error,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Amount (TSh)',
+                    prefixText: 'TSh ',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: descCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Description',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            final amount = double.tryParse(
+                              amountCtrl.text.replaceAll(',', ''),
+                            );
+                            if (amount == null || amount <= 0) return;
+                            setSheet(() => isSaving = true);
+                            await EnterpriseTransactionService.instance
+                                .updateBusinessTransaction(tx['id'] as String, {
+                                  'amount': amount,
+                                  'description': descCtrl.text.isEmpty
+                                      ? null
+                                      : descCtrl.text,
+                                });
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            _loadData();
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: isSaving
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Save Changes',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -549,8 +682,8 @@ class _BusinessTransactionsScreenState
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const CustomIconWidget(
-                                  iconName: 'receipt_long',
+                                const Icon(
+                                  Icons.receipt_long,
                                   color: AppTheme.mutedLight,
                                   size: 48,
                                 ),
@@ -713,94 +846,108 @@ class _BusinessTransactionsScreenState
     final branch = _branchName(tx['branch_id'] as String?);
     final date = tx['transaction_date'] as String;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceLight,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineLight),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: (isRevenue ? AppTheme.success : AppTheme.error).withAlpha(
-                15,
+    return GestureDetector(
+      onTap: () => _showEditTransactionSheet(tx),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceLight,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.outlineLight),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: (isRevenue ? AppTheme.success : AppTheme.error)
+                    .withAlpha(15),
+                borderRadius: BorderRadius.circular(10),
               ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(
-              child: CustomIconWidget(
-                iconName: isRevenue ? 'arrow_downward' : 'arrow_upward',
-                color: isRevenue ? AppTheme.success : AppTheme.error,
-                size: 18,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  tx['category'] as String,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.onSurfaceLight,
-                  ),
+              child: Center(
+                child: Icon(
+                  isRevenue ? Icons.arrow_downward : Icons.arrow_upward,
+                  color: isRevenue ? AppTheme.success : AppTheme.error,
+                  size: 18,
                 ),
-                if (tx['description'] != null)
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    tx['description'] as String,
+                    tx['category'] as String,
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 10,
-                      color: AppTheme.mutedLight,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.onSurfaceLight,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                Row(
-                  children: [
+                  if (tx['description'] != null)
                     Text(
-                      date,
+                      tx['description'] as String,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 10,
                         color: AppTheme.mutedLight,
                       ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    if (branch != null) ...[
+                  Row(
+                    children: [
                       Text(
-                        ' • ',
+                        date,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 10,
                           color: AppTheme.mutedLight,
                         ),
                       ),
-                      Text(
-                        branch,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 10,
-                          color: AppTheme.mutedLight,
+                      if (branch != null) ...[
+                        Text(
+                          ' • ',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10,
+                            color: AppTheme.mutedLight,
+                          ),
                         ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        Text(
+                          branch,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10,
+                            color: AppTheme.mutedLight,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '${isRevenue ? '+' : '-'}${_fmt(amt)}',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: isRevenue ? AppTheme.success : AppTheme.error,
+                  ),
+                ),
+                Text(
+                  'Tap to edit',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 9,
+                    color: AppTheme.mutedLight,
+                  ),
                 ),
               ],
             ),
-          ),
-          Text(
-            '${isRevenue ? '+' : '-'}${_fmt(amt)}',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: isRevenue ? AppTheme.success : AppTheme.error,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -127,6 +127,28 @@ class _NetWorthScreenState extends State<NetWorthScreen> {
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                         child: Row(
                           children: [
+                            GestureDetector(
+                              onTap: () => context.pop(),
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surfaceLight,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: AppTheme.outlineLight,
+                                  ),
+                                ),
+                                child: const Center(
+                                  child: CustomIconWidget(
+                                    iconName: 'arrow_back',
+                                    color: AppTheme.primary,
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,

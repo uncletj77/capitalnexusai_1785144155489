@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/app_export.dart';
 import '../../services/wealth_intelligence_service.dart';
 import '../../widgets/cna_shared_components.dart';

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_export.dart';
-import '../../services/supabase_service.dart';
+import '../../services/enterprise_reconciliation_service.dart';
+import '../../services/finance_service.dart';
+import '../../widgets/cna_shared_components.dart';
 
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
@@ -10,10 +12,12 @@ class AccountsScreen extends StatefulWidget {
   State<AccountsScreen> createState() => _AccountsScreenState();
 }
 
-class _AccountsScreenState extends State<AccountsScreen> {
-  final _client = SupabaseService.client;
+class _AccountsScreenState extends State<AccountsScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   bool _isLoading = true;
   List<Map<String, dynamic>> _accounts = [];
+  List<Map<String, dynamic>> _transfers = [];
   String _selectedFilter = 'all';
 
   final List<Map<String, dynamic>> _filters = [
@@ -27,35 +31,42 @@ class _AccountsScreenState extends State<AccountsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadAccounts();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadData();
   }
 
-  Future<void> _loadAccounts() async {
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    try {
-      final userId = _client.auth.currentUser?.id;
-      if (userId == null) return;
-      var query = _client
-          .from('financial_accounts')
-          .select()
-          .eq('user_id', userId);
-      if (_selectedFilter != 'all') {
-        query = query.eq('account_category', _selectedFilter);
-      }
-      final res = await query.order('created_at', ascending: false);
+    final results = await Future.wait([
+      FinanceService.instance.getAccountsWithBalances(
+        category: _selectedFilter == 'all' ? null : _selectedFilter,
+      ),
+      EnterpriseReconciliationService.instance.getAccountTransfers(limit: 30),
+    ]);
+    if (mounted) {
       setState(() {
-        _accounts = List<Map<String, dynamic>>.from(res);
+        _accounts = results[0];
+        _transfers = results[1];
         _isLoading = false;
       });
-    } catch (e) {
-      setState(() => _isLoading = false);
     }
   }
 
-  double get _totalBalance =>
-      _accounts.fold(0, (sum, a) => sum + (a['balance'] as num).toDouble());
+  double get _totalBalance => _accounts.fold(
+    0.0,
+    (sum, a) => sum + ((a['calculated_balance'] as num?)?.toDouble() ?? 0),
+  );
 
   String _formatAmount(double amount) {
+    if (amount >= 1000000000) {
+      return 'TSh ${(amount / 1000000000).toStringAsFixed(1)}B';
+    }
     if (amount >= 1000000) {
       return 'TSh ${(amount / 1000000).toStringAsFixed(1)}M';
     }
@@ -69,18 +80,34 @@ class _AccountsScreenState extends State<AccountsScreen> {
     );
   }
 
+  String _categoryIcon(String? cat) {
+    switch (cat) {
+      case 'bank':
+        return 'account_balance';
+      case 'mobile_money':
+        return 'phone_android';
+      case 'cash':
+        return 'payments';
+      case 'investment':
+        return 'trending_up';
+      default:
+        return 'account_balance_wallet';
+    }
+  }
+
   void _showAddAccountSheet() {
     final nameCtrl = TextEditingController();
     final providerCtrl = TextEditingController();
     final balanceCtrl = TextEditingController();
     String selectedCategory = 'bank';
+    bool isSaving = false;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Container(
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheet) => Container(
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(ctx).viewInsets.bottom,
           ),
@@ -112,27 +139,36 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 const SizedBox(height: 16),
                 TextField(
                   controller: nameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Account Name',
+                  decoration: InputDecoration(
+                    labelText: 'Account Name *',
                     hintText: 'e.g. CRDB Savings',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: providerCtrl,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Provider / Bank Name',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: balanceCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Current Balance (TSh)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 Text(
                   'Account Type',
                   style: Theme.of(
@@ -142,56 +178,431 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
-                  children: ['bank', 'mobile_money', 'cash', 'investment'].map((
-                    cat,
-                  ) {
-                    final isSelected = selectedCategory == cat;
-                    return GestureDetector(
-                      onTap: () => setSheetState(() => selectedCategory = cat),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppTheme.primary
-                              : AppTheme.surfaceVariantLight,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          cat.replaceAll('_', ' ').toUpperCase(),
-                          style: Theme.of(ctx).textTheme.labelSmall?.copyWith(
-                            color: isSelected
-                                ? Colors.white
-                                : AppTheme.mutedLight,
+                  runSpacing: 8,
+                  children:
+                      [
+                        'bank',
+                        'mobile_money',
+                        'cash',
+                        'investment',
+                        'savings',
+                      ].map((cat) {
+                        final isSelected = selectedCategory == cat;
+                        return GestureDetector(
+                          onTap: () => setSheet(() => selectedCategory = cat),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppTheme.primary
+                                  : AppTheme.surfaceVariantLight,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              cat.replaceAll('_', ' ').toUpperCase(),
+                              style: TextStyle(
+                                color: isSelected
+                                    ? Colors.white
+                                    : AppTheme.mutedLight,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                        );
+                      }).toList(),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () async {
-                      final userId = _client.auth.currentUser?.id;
-                      if (userId == null || nameCtrl.text.isEmpty) return;
-                      await _client.from('financial_accounts').insert({
-                        'user_id': userId,
-                        'account_name': nameCtrl.text.trim(),
-                        'provider': providerCtrl.text.trim(),
-                        'balance': double.tryParse(balanceCtrl.text) ?? 0,
-                        'account_category': selectedCategory,
-                        'currency': 'TZS',
-                      });
-                      if (ctx.mounted) Navigator.pop(ctx);
-                      _loadAccounts();
-                    },
-                    child: const Text('Add Account'),
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            if (nameCtrl.text.isEmpty) return;
+                            setSheet(() => isSaving = true);
+                            await FinanceService.instance.createAccount(
+                              name: nameCtrl.text.trim(),
+                              category: selectedCategory,
+                              provider: providerCtrl.text.trim().isEmpty
+                                  ? null
+                                  : providerCtrl.text.trim(),
+                              initialBalance:
+                                  double.tryParse(balanceCtrl.text) ?? 0,
+                            );
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            _loadData();
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: isSaving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Add Account',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showTransferSheet() {
+    if (_accounts.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You need at least 2 accounts to transfer'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    String? fromAccountId = _accounts[0]['id'] as String?;
+    String? toAccountId = _accounts.length > 1
+        ? _accounts[1]['id'] as String?
+        : null;
+    final amountCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheet) => Container(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          decoration: const BoxDecoration(
+            color: AppTheme.surfaceLight,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Transfer Funds',
+                      style: Theme.of(ctx).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: fromAccountId,
+                  decoration: InputDecoration(
+                    labelText: 'From Account',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  items: _accounts
+                      .map(
+                        (a) => DropdownMenuItem(
+                          value: a['id'] as String,
+                          child: Text(
+                            '${a['account_name']} (${_formatAmount((a['calculated_balance'] as num?)?.toDouble() ?? 0)})',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setSheet(() => fromAccountId = v),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: toAccountId,
+                  decoration: InputDecoration(
+                    labelText: 'To Account',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  items: _accounts
+                      .where((a) => a['id'] != fromAccountId)
+                      .map(
+                        (a) => DropdownMenuItem(
+                          value: a['id'] as String,
+                          child: Text(
+                            a['account_name'] as String? ?? 'Account',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setSheet(() => toAccountId = v),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Amount (TSh) *',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: descCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Description',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            final amount = double.tryParse(amountCtrl.text);
+                            if (amount == null ||
+                                amount <= 0 ||
+                                fromAccountId == null ||
+                                toAccountId == null) {
+                              return;
+                            }
+                            if (fromAccountId == toAccountId) return;
+                            setSheet(() => isSaving = true);
+                            final success =
+                                await EnterpriseReconciliationService.instance
+                                    .executeAccountTransfer(
+                                      fromAccountId: fromAccountId!,
+                                      toAccountId: toAccountId!,
+                                      amount: amount,
+                                      description: descCtrl.text.isEmpty
+                                          ? null
+                                          : descCtrl.text,
+                                    );
+                            if (ctx.mounted) {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    success
+                                        ? 'Transfer completed successfully'
+                                        : 'Transfer failed',
+                                  ),
+                                  backgroundColor: success
+                                      ? AppTheme.success
+                                      : AppTheme.error,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                            _loadData();
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: isSaving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Execute Transfer',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEditAccountSheet(Map<String, dynamic> account) {
+    final nameCtrl = TextEditingController(
+      text: account['account_name'] as String? ?? '',
+    );
+    final providerCtrl = TextEditingController(
+      text: account['provider'] as String? ?? '',
+    );
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheet) => Container(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          decoration: const BoxDecoration(
+            color: AppTheme.surfaceLight,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Edit Account',
+                      style: Theme.of(ctx).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Account Name',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: providerCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Provider',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (dCtx) => AlertDialog(
+                              title: const Text('Archive Account'),
+                              content: const Text(
+                                'This account will be archived. Transactions will be preserved.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dCtx, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dCtx, true),
+                                  child: const Text(
+                                    'Archive',
+                                    style: TextStyle(color: AppTheme.error),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            await FinanceService.instance.archiveAccount(
+                              account['id'] as String,
+                            );
+                            _loadData();
+                          }
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.error,
+                          side: const BorderSide(color: AppTheme.error),
+                        ),
+                        child: const Text('Archive'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: isSaving
+                            ? null
+                            : () async {
+                                setSheet(() => isSaving = true);
+                                await FinanceService.instance
+                                    .updateAccount(account['id'] as String, {
+                                      'account_name': nameCtrl.text.trim(),
+                                      'provider': providerCtrl.text.trim(),
+                                    });
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                _loadData();
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Save',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
               ],
             ),
           ),
@@ -203,16 +614,38 @@ class _AccountsScreenState extends State<AccountsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
+            // Header
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               child: Row(
                 children: [
+                  GestureDetector(
+                    onTap: () => context.pop(),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceLight,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.outlineLight),
+                      ),
+                      child: const Center(
+                        child: CustomIconWidget(
+                          iconName: 'arrow_back',
+                          color: AppTheme.primary,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,13 +658,33 @@ class _AccountsScreenState extends State<AccountsScreen> {
                         ),
                         Text(
                           'Total: ${_formatAmount(_totalBalance)}',
-                          style: theme.textTheme.bodyMedium?.copyWith(
+                          style: theme.textTheme.bodySmall?.copyWith(
                             color: AppTheme.mutedLight,
                           ),
                         ),
                       ],
                     ),
                   ),
+                  GestureDetector(
+                    onTap: _showTransferSheet,
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceLight,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.outlineLight),
+                      ),
+                      child: const Center(
+                        child: CustomIconWidget(
+                          iconName: 'swap_horiz',
+                          color: AppTheme.primary,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   GestureDetector(
                     onTap: _showAddAccountSheet,
                     child: Container(
@@ -253,32 +706,33 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            // Filter chips
             SizedBox(
-              height: 40,
+              height: 36,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 itemCount: _filters.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (_, i) {
+                separatorBuilder: (_, __) => const SizedBox(width: 6),
+                itemBuilder: (ctx, i) {
                   final f = _filters[i];
                   final isSelected = _selectedFilter == f['key'];
                   return GestureDetector(
                     onTap: () {
                       setState(() => _selectedFilter = f['key'] as String);
-                      _loadAccounts();
+                      _loadData();
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
+                        horizontal: 12,
+                        vertical: 6,
                       ),
                       decoration: BoxDecoration(
                         color: isSelected
                             ? AppTheme.primary
                             : AppTheme.surfaceLight,
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(18),
                         border: Border.all(
                           color: isSelected
                               ? AppTheme.primary
@@ -287,10 +741,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       ),
                       child: Text(
                         f['label'] as String,
-                        style: theme.textTheme.labelMedium?.copyWith(
+                        style: TextStyle(
                           color: isSelected
                               ? Colors.white
                               : AppTheme.mutedLight,
+                          fontSize: 12,
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
                         ),
                       ),
                     ),
@@ -298,44 +756,39 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 },
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            // Tabs
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceLight,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.outlineLight),
+              ),
+              child: TabBar(
+                controller: _tabController,
+                labelColor: AppTheme.primary,
+                unselectedLabelColor: AppTheme.mutedLight,
+                indicator: BoxDecoration(
+                  color: AppTheme.primary.withAlpha(20),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                tabs: const [
+                  Tab(text: 'Accounts'),
+                  Tab(text: 'Transfers'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _accounts.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const CustomIconWidget(
-                            iconName: 'account_balance_wallet',
-                            color: AppTheme.mutedLight,
-                            size: 48,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'No accounts yet',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              color: AppTheme.mutedLight,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          ElevatedButton(
-                            onPressed: _showAddAccountSheet,
-                            child: const Text('Add Account'),
-                          ),
-                        ],
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadAccounts,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-                        itemCount: _accounts.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
-                        itemBuilder: (_, i) =>
-                            _buildAccountCard(theme, _accounts[i]),
-                      ),
+                  ? const CnaLoadingState(message: 'Loading accounts...')
+                  : TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildAccountsTab(theme),
+                        _buildTransfersTab(theme),
+                      ],
                     ),
             ),
           ],
@@ -344,81 +797,182 @@ class _AccountsScreenState extends State<AccountsScreen> {
     );
   }
 
-  Widget _buildAccountCard(ThemeData theme, Map<String, dynamic> acc) {
-    final color = _parseColor(acc['color'] as String?);
-    final balance = (acc['balance'] as num).toDouble();
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceLight,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.outlineLight),
+  Widget _buildAccountsTab(ThemeData theme) {
+    if (_accounts.isEmpty) {
+      return CnaEmptyState(
+        iconName: 'account_balance_wallet',
+        title: 'No Accounts',
+        description:
+            'Add your first financial account to start tracking your money.',
+        ctaLabel: 'Add Account',
+        onCta: _showAddAccountSheet,
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+        itemCount: _accounts.length,
+        itemBuilder: (ctx, i) {
+          final acc = _accounts[i];
+          final balance = (acc['calculated_balance'] as num?)?.toDouble() ?? 0;
+          final color = _parseColor(acc['color'] as String?);
+          final category = acc['account_category'] as String? ?? 'bank';
+
+          return GestureDetector(
+            onTap: () => _showEditAccountSheet(acc),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceLight,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.outlineLight),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(20),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: CustomIconWidget(
+                        iconName:
+                            acc['icon'] as String? ?? _categoryIcon(category),
+                        color: color,
+                        size: 24,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          acc['account_name'] as String? ?? 'Account',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          '${(acc['provider'] as String? ?? '').isNotEmpty ? acc['provider'] : category.replaceAll('_', ' ')} • ${acc['currency'] ?? 'TZS'}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppTheme.mutedLight,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        _formatAmount(balance),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: balance >= 0
+                              ? AppTheme.primary
+                              : AppTheme.error,
+                        ),
+                      ),
+                      Text(
+                        category.replaceAll('_', ' ').toUpperCase(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: AppTheme.mutedLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: color.withAlpha(20),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Center(
-              child: CustomIconWidget(
-                iconName: acc['icon'] as String? ?? 'account_balance',
-                color: color,
-                size: 24,
-              ),
-            ),
+    );
+  }
+
+  Widget _buildTransfersTab(ThemeData theme) {
+    if (_transfers.isEmpty) {
+      return CnaEmptyState(
+        iconName: 'swap_horiz',
+        title: 'No Transfers',
+        description: 'Transfer funds between accounts using the swap button.',
+        ctaLabel: 'New Transfer',
+        onCta: _showTransferSheet,
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+      itemCount: _transfers.length,
+      itemBuilder: (ctx, i) {
+        final t = _transfers[i];
+        final amount = (t['amount'] as num?)?.toDouble() ?? 0;
+        final date = t['transfer_date'] as String? ?? '';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceLight,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.outlineLight),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  acc['account_name'] as String,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${acc['provider'] ?? (acc['account_category'] as String).replaceAll('_', ' ')} • ${acc['currency'] ?? 'TZS'}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: AppTheme.mutedLight,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          child: Row(
             children: [
-              Text(
-                _formatAmount(balance),
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: AppTheme.primary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: color.withAlpha(20),
+                  color: AppTheme.primary.withAlpha(20),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text(
-                  (acc['account_category'] as String).replaceAll('_', ' '),
-                  style: theme.textTheme.labelSmall?.copyWith(color: color),
+                child: const Center(
+                  child: CustomIconWidget(
+                    iconName: 'swap_horiz',
+                    color: AppTheme.primary,
+                    size: 20,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      t['description'] as String? ?? 'Account Transfer',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      date,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppTheme.mutedLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                _formatAmount(amount),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.primary,
                 ),
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

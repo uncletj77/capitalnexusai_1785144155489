@@ -128,7 +128,9 @@ class _ExportWizardWidgetState extends State<ExportWizardWidget> {
                         : AppTheme.surfaceLight,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: sel ? AppTheme.primaryLight : AppTheme.outlineLight,
+                      color: sel
+                          ? AppTheme.primaryLight
+                          : AppTheme.outlineLight,
                     ),
                   ),
                   child: Row(

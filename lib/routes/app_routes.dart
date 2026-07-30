@@ -68,6 +68,10 @@ import '../presentation/wealth_planning_screen/wealth_planning_screen.dart';
 import '../presentation/executive_dashboard_screen/executive_dashboard_screen.dart';
 import '../presentation/enterprise_reporting_screen/enterprise_reporting_screen.dart';
 import '../presentation/ai_workspace_screen/ai_workspace_screen.dart';
+import '../presentation/savings_centre_screen/savings_centre_screen.dart';
+import '../presentation/financial_closing_screen/financial_closing_screen.dart';
+import '../presentation/master_asset_registry_screen/master_asset_registry_screen.dart';
+import '../presentation/enterprise_transaction_screen/enterprise_transaction_screen.dart';
 
 class AppRoutes {
   static const String initial = '/';
@@ -147,6 +151,10 @@ class AppRoutes {
   static const String executiveDashboardScreen = '/executive-dashboard';
   static const String enterpriseReportingScreen = '/enterprise-reporting';
   static const String aiWorkspaceScreen = '/ai-workspace';
+  static const String savingsCentreScreen = '/savings-centre';
+  static const String financialClosingScreen = '/financial-closing';
+  static const String masterAssetRegistryScreen = '/master-asset-registry';
+  static const String enterpriseTransactionScreen = '/enterprise-transactions';
 }
 
 final GoRouter appRouter = GoRouter(
@@ -1574,6 +1582,94 @@ final GoRouter appRouter = GoRouter(
               child: child,
             ),
         transitionDuration: const Duration(milliseconds: 280),
+      ),
+    ),
+    GoRoute(
+      path: AppRoutes.savingsCentreScreen,
+      pageBuilder: (context, state) => CustomTransitionPage(
+        key: state.pageKey,
+        child: const SavingsCentreScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            SlideTransition(
+              position:
+                  Tween<Offset>(
+                    begin: const Offset(1, 0),
+                    end: Offset.zero,
+                  ).animate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ),
+                  ),
+              child: child,
+            ),
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    ),
+    GoRoute(
+      path: AppRoutes.financialClosingScreen,
+      pageBuilder: (context, state) => CustomTransitionPage(
+        key: state.pageKey,
+        child: const FinancialClosingScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            SlideTransition(
+              position:
+                  Tween<Offset>(
+                    begin: const Offset(1, 0),
+                    end: Offset.zero,
+                  ).animate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ),
+                  ),
+              child: child,
+            ),
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    ),
+    GoRoute(
+      path: AppRoutes.masterAssetRegistryScreen,
+      pageBuilder: (context, state) => CustomTransitionPage(
+        key: state.pageKey,
+        child: const MasterAssetRegistryScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            SlideTransition(
+              position:
+                  Tween<Offset>(
+                    begin: const Offset(1, 0),
+                    end: Offset.zero,
+                  ).animate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ),
+                  ),
+              child: child,
+            ),
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    ),
+    GoRoute(
+      path: AppRoutes.enterpriseTransactionScreen,
+      pageBuilder: (context, state) => CustomTransitionPage(
+        key: state.pageKey,
+        child: const EnterpriseTransactionScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            SlideTransition(
+              position:
+                  Tween<Offset>(
+                    begin: const Offset(1, 0),
+                    end: Offset.zero,
+                  ).animate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ),
+                  ),
+              child: child,
+            ),
+        transitionDuration: const Duration(milliseconds: 300),
       ),
     ),
   ],

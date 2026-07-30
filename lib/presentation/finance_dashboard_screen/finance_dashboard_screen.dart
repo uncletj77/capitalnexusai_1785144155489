@@ -2,7 +2,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_export.dart';
+import '../../services/enterprise_reconciliation_service.dart';
 import '../../services/finance_service.dart';
+import '../../services/master_asset_registry_service.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/cna_shared_components.dart';
 
@@ -27,6 +29,7 @@ class _FinanceDashboardScreenState extends State<FinanceDashboardScreen> {
   List<Map<String, dynamic>> _recentTransactions = [];
   List<Map<String, dynamic>> _accounts = [];
   List<FlSpot> _cashFlowSpots = [];
+  bool _isReconciling = false;
 
   @override
   void initState() {
@@ -97,6 +100,23 @@ class _FinanceDashboardScreenState extends State<FinanceDashboardScreen> {
       });
     } catch (e) {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _runReconciliation() async {
+    setState(() => _isReconciling = true);
+    await EnterpriseReconciliationService.instance.runFullReconciliation();
+    await MasterAssetRegistryService.instance.autoRegisterAllAssets();
+    if (mounted) {
+      setState(() => _isReconciling = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Financial data reconciled and synchronized'),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _loadData();
     }
   }
 
@@ -180,6 +200,7 @@ class _FinanceDashboardScreenState extends State<FinanceDashboardScreen> {
                           SliverToBoxAdapter(
                             child: _buildAccountsSummary(theme),
                           ),
+                          SliverToBoxAdapter(child: _buildQuickModules(theme)),
                           SliverToBoxAdapter(
                             child: _buildRecentTransactions(theme),
                           ),
@@ -232,6 +253,35 @@ class _FinanceDashboardScreenState extends State<FinanceDashboardScreen> {
               ],
             ),
           ),
+          GestureDetector(
+            onTap: _isReconciling ? null : _runReconciliation,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceLight,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.outlineLight),
+              ),
+              child: Center(
+                child: _isReconciling
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          color: AppTheme.primary,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const CustomIconWidget(
+                        iconName: 'sync',
+                        color: AppTheme.primary,
+                        size: 20,
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           GestureDetector(
             onTap: _loadData,
             child: Container(
@@ -1225,6 +1275,89 @@ class _FinanceDashboardScreenState extends State<FinanceDashboardScreen> {
             Icon(Icons.arrow_forward_ios, color: color, size: 16),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildQuickModules(ThemeData theme) {
+    final modules = [
+      {
+        'label': 'Savings',
+        'icon': 'savings',
+        'route': AppRoutes.savingsCentreScreen,
+        'color': AppTheme.success,
+      },
+      {
+        'label': 'Closing',
+        'icon': 'assessment',
+        'route': AppRoutes.financialClosingScreen,
+        'color': AppTheme.primary,
+      },
+      {
+        'label': 'Asset Registry',
+        'icon': 'inventory_2',
+        'route': AppRoutes.masterAssetRegistryScreen,
+        'color': const Color(0xFF8B5CF6),
+      },
+      {
+        'label': 'Goals',
+        'icon': 'flag',
+        'route': AppRoutes.financialGoalsScreen,
+        'color': AppTheme.warning,
+      },
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Quick Access',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: modules.map((m) {
+              final color = m['color'] as Color;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => context.push(m['route'] as String),
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: color.withAlpha(40)),
+                    ),
+                    child: Column(
+                      children: [
+                        CustomIconWidget(
+                          iconName: m['icon'] as String,
+                          color: color,
+                          size: 22,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          m['label'] as String,
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }

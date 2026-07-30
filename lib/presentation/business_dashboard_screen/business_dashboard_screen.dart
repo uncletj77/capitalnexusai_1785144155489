@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_export.dart';
+import '../../services/master_asset_registry_service.dart';
 import '../../services/supabase_service.dart';
 
 class BusinessDashboardScreen extends StatefulWidget {
@@ -1409,6 +1410,200 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showEditBusinessSheet(Map<String, dynamic> biz) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
+        decoration: const BoxDecoration(
+          color: AppTheme.surfaceLight,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Business Options',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                biz['name'] as String? ?? '',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14,
+                  color: AppTheme.mutedLight,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _businessActionTile(
+                Icons.edit,
+                'Edit Business',
+                AppTheme.primary,
+                () {
+                  Navigator.pop(context);
+                  context
+                      .push('/add-business', extra: biz)
+                      .then((_) => _loadBusinesses());
+                },
+              ),
+              _businessActionTile(
+                Icons.receipt_long,
+                'View Transactions',
+                AppTheme.warning,
+                () {
+                  Navigator.pop(context);
+                  context.push('/business-transactions', extra: biz);
+                },
+              ),
+              _businessActionTile(
+                Icons.sync,
+                'Register in Asset Intelligence',
+                const Color(0xFF8B5CF6),
+                () async {
+                  Navigator.pop(context);
+                  await MasterAssetRegistryService.instance
+                      .autoRegisterAllAssets();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Business registered in Asset Intelligence',
+                        ),
+                        backgroundColor: AppTheme.success,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+              ),
+              _businessActionTile(
+                Icons.archive,
+                'Archive Business',
+                AppTheme.mutedLight,
+                () async {
+                  Navigator.pop(context);
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      title: const Text('Archive Business'),
+                      content: const Text(
+                        'This business will be archived. All records will be preserved.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(c, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(c, true),
+                          child: const Text(
+                            'Archive',
+                            style: TextStyle(color: AppTheme.error),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await _client
+                        .from('businesses')
+                        .update({'is_active': false})
+                        .eq('id', biz['id'] as String);
+                    _loadBusinesses();
+                  }
+                },
+              ),
+              _businessActionTile(
+                Icons.delete,
+                'Delete Business',
+                AppTheme.error,
+                () async {
+                  Navigator.pop(context);
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      title: const Text('Delete Business'),
+                      content: const Text(
+                        'This will permanently delete the business. Transaction history will be preserved.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(c, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(c, true),
+                          child: const Text(
+                            'Delete',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await _client
+                        .from('businesses')
+                        .update({'is_active': false, 'is_deleted': true})
+                        .eq('id', biz['id'] as String);
+                    _loadBusinesses();
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _businessActionTile(
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return ListTile(
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: color.withAlpha(20),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: color, size: 18),
+      ),
+      title: Text(
+        label,
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      onTap: onTap,
+      contentPadding: EdgeInsets.zero,
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_export.dart';
+import '../../services/master_asset_registry_service.dart';
 import '../../services/supabase_service.dart';
 import '../../widgets/cna_shared_components.dart';
 
@@ -589,8 +590,7 @@ class _InvestmentDashboardScreenState extends State<InvestmentDashboardScreen> {
           final isPositive = roi >= 0;
           final cat = inv['category'] as String? ?? 'other';
           return GestureDetector(
-            onTap: () =>
-                context.push(AppRoutes.investmentDetailsScreen, extra: inv),
+            onTap: () => _showEditInvestmentSheet(inv),
             child: Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(12),
@@ -871,6 +871,177 @@ class _InvestmentDashboardScreenState extends State<InvestmentDashboardScreen> {
           }).toList(),
         ),
       ],
+    );
+  }
+
+  void _showEditInvestmentSheet(Map<String, dynamic> inv) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Investment Options',
+                    style: GoogleFonts.manrope(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                inv['name'] as String? ?? '',
+                style: GoogleFonts.manrope(
+                  fontSize: 14,
+                  color: const Color(0xFF6B7280),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _invActionTile(
+                Icons.edit,
+                'Edit Investment',
+                const Color(0xFF1A5F7A),
+                () {
+                  Navigator.pop(context);
+                  context
+                      .push(AppRoutes.addInvestmentScreen, extra: inv)
+                      .then((_) => _loadData());
+                },
+              ),
+              _invActionTile(
+                Icons.bar_chart,
+                'View Details',
+                const Color(0xFF2D9CDB),
+                () {
+                  Navigator.pop(context);
+                  context.push(AppRoutes.investmentDetailsScreen, extra: inv);
+                },
+              ),
+              _invActionTile(
+                Icons.sync,
+                'Register in Asset Intelligence',
+                const Color(0xFF8B5CF6),
+                () async {
+                  Navigator.pop(context);
+                  await MasterAssetRegistryService.instance
+                      .autoRegisterAllAssets();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Investment registered in Asset Intelligence',
+                        ),
+                        backgroundColor: Color(0xFF27AE60),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+              ),
+              _invActionTile(
+                Icons.archive,
+                'Archive Investment',
+                const Color(0xFF6B7280),
+                () async {
+                  Navigator.pop(context);
+                  await _client
+                      .from('investments')
+                      .update({'status': 'archived', 'is_active': false})
+                      .eq('id', inv['id'] as String);
+                  _loadData();
+                },
+              ),
+              _invActionTile(
+                Icons.delete,
+                'Delete Investment',
+                const Color(0xFFEB5757),
+                () async {
+                  Navigator.pop(context);
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      title: const Text('Delete Investment'),
+                      content: const Text(
+                        'This will permanently delete the investment. Transaction history will be preserved.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(c, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(c, true),
+                          child: const Text(
+                            'Delete',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await _client
+                        .from('investments')
+                        .update({
+                          'status': 'closed',
+                          'is_active': false,
+                          'is_deleted': true,
+                        })
+                        .eq('id', inv['id'] as String);
+                    _loadData();
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _invActionTile(
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return ListTile(
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: color.withAlpha(20),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: color, size: 18),
+      ),
+      title: Text(
+        label,
+        style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+      onTap: onTap,
+      contentPadding: EdgeInsets.zero,
     );
   }
 }

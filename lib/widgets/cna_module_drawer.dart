@@ -104,9 +104,19 @@ class CnaModuleDrawer extends StatelessWidget {
                       AppRoutes.accountsScreen,
                     ),
                     _NavItem(
-                      'Transactions',
+                      'Transaction Engine',
                       'receipt_long',
+                      AppRoutes.enterpriseTransactionScreen,
+                    ),
+                    _NavItem(
+                      'Transactions',
+                      'history',
                       AppRoutes.transactionHistoryScreen,
+                    ),
+                    _NavItem(
+                      'Savings Centre',
+                      'savings',
+                      AppRoutes.savingsCentreScreen,
                     ),
                     _NavItem(
                       'Budget Planner',
@@ -123,12 +133,22 @@ class CnaModuleDrawer extends StatelessWidget {
                       'bar_chart',
                       AppRoutes.netWorthScreen,
                     ),
+                    _NavItem(
+                      'Financial Closing',
+                      'assessment',
+                      AppRoutes.financialClosingScreen,
+                    ),
                   ]),
                   _buildSection(context, 'Assets', [
                     _NavItem(
                       'Asset Dashboard',
                       'real_estate_agent',
                       AppRoutes.assetDashboardScreen,
+                    ),
+                    _NavItem(
+                      'Master Asset Registry',
+                      'inventory_2',
+                      AppRoutes.masterAssetRegistryScreen,
                     ),
                     _NavItem(
                       'Asset Portfolio',

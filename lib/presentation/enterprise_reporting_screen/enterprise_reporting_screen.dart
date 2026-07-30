@@ -60,10 +60,7 @@ class _EnterpriseReportingScreenState extends State<EnterpriseReportingScreen>
       ]);
       if (mounted) {
         setState(() {
-          _reportData = {
-            ...results[0],
-            ...results[1],
-          };
+          _reportData = {...results[0], ...results[1]};
           _isLoading = false;
         });
       }

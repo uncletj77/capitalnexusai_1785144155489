@@ -693,6 +693,27 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen>
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => Navigator.of(
+                      context,
+                    ).pushNamed('/enterprise-transactions'),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const CustomIconWidget(
+                        iconName: 'tune',
+                        size: 18,
+                        color: AppTheme.primary,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

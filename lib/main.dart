@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sizer/sizer.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:sizer/sizer.dart';
 
 import './providers/language_provider.dart';
 import './providers/theme_provider.dart';

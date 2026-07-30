@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_export.dart';
+import '../../services/master_asset_registry_service.dart';
 import '../../services/supabase_service.dart';
 
 class AddInvestmentScreen extends StatefulWidget {
@@ -185,6 +186,8 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
             backgroundColor: const Color(0xFF27AE60),
           ),
         );
+        // Auto-register in Asset Intelligence
+        await MasterAssetRegistryService.instance.autoRegisterAllAssets();
         context.pop();
       }
     } catch (e) {

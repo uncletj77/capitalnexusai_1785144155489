@@ -129,8 +129,5 @@ class ChatNotifier extends FamilyNotifier<ChatState, ChatConfig> {
 
 final chatNotifierProvider =
     NotifierProvider.family<ChatNotifier, ChatState, ChatConfig>(
-      () => ChatNotifier(
-        provider: '',
-        model: '',
-      ),
+      () => ChatNotifier(provider: '', model: ''),
     );

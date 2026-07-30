@@ -596,17 +596,44 @@ class _FinancialGoalsScreenState extends State<FinancialGoalsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Financial Goals',
-                              style: theme.textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              '$activeGoals active · $completedGoals completed${pausedGoals > 0 ? ' · $pausedGoals paused' : ''}',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: AppTheme.mutedLight,
-                              ),
+                            Row(
+                              children: [
+                                GestureDetector(
+                                  onTap: () => context.pop(),
+                                  child: Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.surfaceLight,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: AppTheme.outlineLight,
+                                      ),
+                                    ),
+                                    child: const Center(
+                                      child: CustomIconWidget(
+                                        iconName: 'arrow_back',
+                                        color: AppTheme.primary,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Financial Goals',
+                                    style: theme.textTheme.headlineMedium
+                                        ?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                                Text(
+                                  '$activeGoals active · $completedGoals completed${pausedGoals > 0 ? ' · $pausedGoals paused' : ''}',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: AppTheme.mutedLight,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),

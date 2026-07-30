@@ -590,9 +590,7 @@ Provide a clear PROCEED / PROCEED WITH CAUTION / DO NOT PROCEED recommendation w
 
       final response = await http.post(
         Uri.parse('https://api.openai.com/v1/chat/completions'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'model': 'gpt-4o-mini',
           'messages': [

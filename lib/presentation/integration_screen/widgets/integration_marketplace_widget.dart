@@ -217,7 +217,9 @@ class _IntegrationMarketplaceWidgetState
                               decoration: BoxDecoration(
                                 color: AppTheme.backgroundLight,
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: AppTheme.outlineLight),
+                                border: Border.all(
+                                  color: AppTheme.outlineLight,
+                                ),
                               ),
                               child: Text(
                                 p,
