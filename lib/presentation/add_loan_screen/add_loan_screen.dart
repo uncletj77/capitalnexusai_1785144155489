@@ -104,6 +104,18 @@ class _AddLoanScreenState extends State<AddLoanScreen> {
     _paymentMethod = l['payment_method'] ?? 'bank_transfer';
     _notesCtrl.text = l['notes'] ?? '';
     _selectedCollateralId = l['collateral_asset_id'];
+    // Fix: populate start date from existing loan
+    if (l['start_date'] != null) {
+      _startDate =
+          DateTime.tryParse(l['start_date'] as String) ?? DateTime.now();
+    } else if (l['created_at'] != null) {
+      _startDate =
+          DateTime.tryParse(l['created_at'] as String) ?? DateTime.now();
+    }
+    // Fix: populate next due date from existing loan
+    if (l['next_due_date'] != null) {
+      _nextDueDate = DateTime.tryParse(l['next_due_date'] as String);
+    }
   }
 
   Future<void> _loadAssets() async {

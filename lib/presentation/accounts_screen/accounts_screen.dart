@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../core/app_export.dart';
 import '../../services/enterprise_reconciliation_service.dart';
 import '../../services/finance_service.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/cna_shared_components.dart';
+import '../../widgets/custom_icon_widget.dart';
 
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
@@ -531,76 +533,128 @@ class _AccountsScreenState extends State<AccountsScreen>
                   ),
                 ),
                 const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () async {
-                          Navigator.pop(ctx);
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (dCtx) => AlertDialog(
-                              title: const Text('Archive Account'),
-                              content: const Text(
-                                'This account will be archived. Transactions will be preserved.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(dCtx, false),
-                                  child: const Text('Cancel'),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(dCtx, true),
-                                  child: const Text(
-                                    'Archive',
-                                    style: TextStyle(color: AppTheme.error),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirm == true) {
-                            await FinanceService.instance.archiveAccount(
-                              account['id'] as String,
-                            );
+                // Save button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            setSheet(() => isSaving = true);
+                            await FinanceService.instance
+                                .updateAccount(account['id'] as String, {
+                                  'account_name': nameCtrl.text.trim(),
+                                  'provider': providerCtrl.text.trim(),
+                                });
+                            if (ctx.mounted) Navigator.pop(ctx);
                             _loadData();
-                          }
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.error,
-                          side: const BorderSide(color: AppTheme.error),
-                        ),
-                        child: const Text('Archive'),
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: isSaving
-                            ? null
-                            : () async {
-                                setSheet(() => isSaving = true);
-                                await FinanceService.instance
-                                    .updateAccount(account['id'] as String, {
-                                      'account_name': nameCtrl.text.trim(),
-                                      'provider': providerCtrl.text.trim(),
-                                    });
-                                if (ctx.mounted) Navigator.pop(ctx);
-                                _loadData();
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                    child: const Text(
+                      'Save Changes',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Archive button
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (dCtx) => AlertDialog(
+                          title: const Text('Archive Account'),
+                          content: const Text(
+                            'This account will be archived. All transactions will be preserved.',
                           ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(dCtx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(dCtx, true),
+                              child: const Text(
+                                'Archive',
+                                style: TextStyle(color: AppTheme.warning),
+                              ),
+                            ),
+                          ],
                         ),
-                        child: const Text(
-                          'Save',
-                          style: TextStyle(color: Colors.white),
-                        ),
+                      );
+                      if (confirm == true) {
+                        await FinanceService.instance.archiveAccount(
+                          account['id'] as String,
+                        );
+                        _loadData();
+                      }
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.warning,
+                      side: const BorderSide(color: AppTheme.warning),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                  ],
+                    child: const Text('Archive Account'),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Delete button
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (dCtx) => AlertDialog(
+                          title: const Text('Delete Account'),
+                          content: const Text(
+                            'This will permanently delete the account. Transaction history will be preserved but unlinked from this account.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(dCtx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(dCtx, true),
+                              child: const Text(
+                                'Delete',
+                                style: TextStyle(color: AppTheme.error),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await _deleteAccount(account['id'] as String);
+                      }
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.error,
+                      side: const BorderSide(color: AppTheme.error),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Delete Account'),
+                  ),
                 ),
                 const SizedBox(height: 8),
               ],
@@ -609,6 +663,36 @@ class _AccountsScreenState extends State<AccountsScreen>
         ),
       ),
     );
+  }
+
+  Future<void> _deleteAccount(String accountId) async {
+    try {
+      // Soft-delete: mark as inactive (no status column in financial_accounts)
+      await FinanceService.instance.updateAccount(accountId, {
+        'is_active': false,
+        'is_archived': true,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account deleted successfully'),
+            backgroundColor: AppTheme.success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      _loadData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete account: $e'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   @override

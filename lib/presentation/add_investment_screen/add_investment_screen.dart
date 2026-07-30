@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_export.dart';
+import '../../services/enterprise_transaction_service.dart';
 import '../../services/master_asset_registry_service.dart';
 import '../../services/supabase_service.dart';
 
@@ -108,13 +109,51 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
     } catch (_) {}
   }
 
+  Future<String?> _ensureDefaultPortfolio(String userId) async {
+    // If we already have a portfolio selected, use it
+    if (_selectedPortfolioId.isNotEmpty) return _selectedPortfolioId;
+
+    // Try to get any existing portfolio
+    if (_portfolios.isNotEmpty) {
+      return _portfolios.first['id'] as String;
+    }
+
+    // Auto-create a default portfolio — if this fails, return null (portfolio is optional)
+    try {
+      final res = await _client
+          .from('investment_portfolios')
+          .insert({
+            'owner_id': userId,
+            'name': 'My Portfolio',
+            'purpose': 'general',
+            'is_active': true,
+          })
+          .select()
+          .single();
+      final newId = res['id'] as String;
+      setState(() {
+        _portfolios.add(res);
+        _selectedPortfolioId = newId;
+      });
+      return newId;
+    } catch (_) {
+      // Portfolio table may not exist or RLS may block — investment saves without portfolio
+      return null;
+    }
+  }
+
   Future<void> _createPortfolio(String name) async {
     try {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) return;
       final res = await _client
           .from('investment_portfolios')
-          .insert({'owner_id': userId, 'name': name, 'purpose': 'general'})
+          .insert({
+            'owner_id': userId,
+            'name': name,
+            'purpose': 'general',
+            'is_active': true,
+          })
           .select()
           .single();
       setState(() {
@@ -125,23 +164,42 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
   }
 
   Future<void> _save() async {
-    if (_nameCtrl.text.isEmpty || _selectedPortfolioId.isEmpty) return;
+    if (_nameCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Investment name is required'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     setState(() => _isSaving = true);
     try {
       final userId = _client.auth.currentUser?.id;
-      if (userId == null) return;
+      if (userId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Not authenticated. Please log in.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
 
-      final data = {
-        'portfolio_id': _selectedPortfolioId,
+      // Try to get a portfolio — but it's optional, investment saves without it
+      final portfolioId = await _ensureDefaultPortfolio(userId);
+
+      final initialValue = double.tryParse(_initialValueCtrl.text) ?? 0;
+      final currentValue =
+          double.tryParse(_currentValueCtrl.text) ?? initialValue;
+
+      final data = <String, dynamic>{
         'owner_id': userId,
         'name': _nameCtrl.text.trim(),
         'category': _selectedCategory,
         'description': _descCtrl.text.trim(),
-        'initial_value': double.tryParse(_initialValueCtrl.text) ?? 0,
-        'current_value':
-            double.tryParse(_currentValueCtrl.text) ??
-            double.tryParse(_initialValueCtrl.text) ??
-            0,
+        'initial_value': initialValue,
+        'current_value': currentValue,
         'ownership_percentage': double.tryParse(_ownershipCtrl.text) ?? 100,
         'expected_return_rate': double.tryParse(_expectedReturnCtrl.text) ?? 0,
         'risk_level': _riskLevel,
@@ -153,51 +211,105 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
         'is_active': true,
       };
 
+      // Only include portfolio_id if we have one
+      if (portfolioId != null && portfolioId.isNotEmpty) {
+        data['portfolio_id'] = portfolioId;
+      }
+
       if (widget.existingInvestment != null) {
+        // UPDATE existing investment
         await _client
             .from('investments')
             .update(data)
             .eq('id', widget.existingInvestment!['id'] as String);
+
+        // Sync updated value to Enterprise Transaction Engine if value changed
+        final oldValue =
+            (widget.existingInvestment!['current_value'] as num?)?.toDouble() ??
+            0;
+        if ((currentValue - oldValue).abs() > 0.01) {
+          final diff = currentValue - oldValue;
+          await EnterpriseTransactionService.instance.createTransaction(
+            type: diff > 0 ? 'investment_deposit' : 'investment_withdrawal',
+            category: 'investment_adjustment',
+            amount: diff.abs(),
+            date: DateTime.now(),
+            title: 'Investment Value Adjustment: ${_nameCtrl.text.trim()}',
+            description:
+                'Value updated from ${oldValue.toStringAsFixed(0)} to ${currentValue.toStringAsFixed(0)}',
+            investmentId: widget.existingInvestment!['id'] as String,
+          );
+        }
       } else {
+        // INSERT new investment
         final inv = await _client
             .from('investments')
             .insert(data)
             .select()
             .single();
-        // Record initial contribution transaction
-        await _client.from('investment_transactions').insert({
-          'investment_id': inv['id'],
-          'owner_id': userId,
-          'type': 'contribution',
-          'amount': double.tryParse(_initialValueCtrl.text) ?? 0,
-          'description': 'Initial investment',
-          'transaction_date': _investmentDate.toIso8601String().split('T')[0],
-        });
+
+        final invId = inv['id'] as String;
+
+        // Record initial contribution in investment_transactions table
+        if (initialValue > 0) {
+          try {
+            await _client.from('investment_transactions').insert({
+              'investment_id': invId,
+              'owner_id': userId,
+              'type': 'contribution',
+              'amount': initialValue,
+              'description': 'Initial investment: ${_nameCtrl.text.trim()}',
+              'transaction_date': _investmentDate.toIso8601String().split(
+                'T',
+              )[0],
+            });
+          } catch (_) {
+            // investment_transactions table may not exist — continue
+          }
+
+          // CRITICAL: Also create in Enterprise Transaction Engine (General Ledger)
+          await EnterpriseTransactionService.instance.createTransaction(
+            type: 'investment_deposit',
+            category: 'investment_contribution',
+            amount: initialValue,
+            date: _investmentDate,
+            title: 'Investment: ${_nameCtrl.text.trim()}',
+            description:
+                'Initial capital for ${_categoryLabels[_selectedCategory] ?? _selectedCategory} investment',
+            investmentId: invId,
+          );
+        }
       }
+
+      // Auto-register in Asset Intelligence
+      try {
+        await MasterAssetRegistryService.instance.autoRegisterAllAssets();
+      } catch (_) {}
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               widget.existingInvestment != null
-                  ? 'Investment updated!'
-                  : 'Investment added!',
+                  ? 'Investment updated successfully!'
+                  : 'Investment saved successfully!',
             ),
             backgroundColor: const Color(0xFF27AE60),
           ),
         );
-        // Auto-register in Asset Intelligence
-        await MasterAssetRegistryService.instance.autoRegisterAllAssets();
         context.pop();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error saving investment: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
-      setState(() => _isSaving = false);
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -313,7 +425,7 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionLabel(theme, 'Investment Name'),
+          _sectionLabel(theme, 'Investment Name *'),
           _textField(theme, _nameCtrl, 'e.g. Mikocheni Land Plot'),
           const SizedBox(height: 16),
           _sectionLabel(theme, 'Description'),
@@ -372,7 +484,15 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
             }).toList(),
           ),
           const SizedBox(height: 16),
-          _sectionLabel(theme, 'Portfolio'),
+          _sectionLabel(theme, 'Portfolio (Optional)'),
+          const SizedBox(height: 4),
+          Text(
+            'A default portfolio will be created automatically if none selected.',
+            style: GoogleFonts.manrope(
+              fontSize: 11,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(height: 8),
           if (_portfolios.isEmpty)
             GestureDetector(
@@ -423,7 +543,7 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
                     const Icon(Icons.add, color: Color(0xFF1A5F7A), size: 18),
                     const SizedBox(width: 8),
                     Text(
-                      'Create a portfolio first',
+                      'Create a portfolio (optional)',
                       style: GoogleFonts.manrope(
                         color: const Color(0xFF1A5F7A),
                         fontWeight: FontWeight.w600,
@@ -435,7 +555,7 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
             )
           else
             DropdownButtonFormField<String>(
-              initialValue: _selectedPortfolioId.isNotEmpty
+              value: _selectedPortfolioId.isNotEmpty
                   ? _selectedPortfolioId
                   : null,
               decoration: InputDecoration(
@@ -449,6 +569,10 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
                   horizontal: 14,
                   vertical: 12,
                 ),
+              ),
+              hint: Text(
+                'Select portfolio',
+                style: GoogleFonts.manrope(fontSize: 14),
               ),
               items: _portfolios.map((p) {
                 return DropdownMenuItem<String>(

@@ -349,6 +349,7 @@ class EnterpriseTransactionService {
     final userId = _userId;
     if (userId == null) return false;
     try {
+      // First try the RPC function
       await _client.rpc(
         'sync_business_transaction_to_ledger',
         params: {
@@ -358,7 +359,71 @@ class EnterpriseTransactionService {
       );
       return true;
     } catch (_) {
-      return false;
+      // RPC failed — fall back to direct insert into financial_transactions
+      try {
+        final bt = await _client
+            .from('business_transactions')
+            .select()
+            .eq('id', businessTransactionId)
+            .maybeSingle();
+        if (bt == null) return false;
+
+        // Check if already synced to avoid duplicates
+        if (bt['financial_transaction_id'] != null) {
+          // Already linked — update the existing financial transaction instead
+          final txType = bt['transaction_type'] == 'revenue'
+              ? 'business_income'
+              : 'business_expense';
+          try {
+            await _client
+                .from('financial_transactions')
+                .update({
+                  'amount': bt['amount'],
+                  'description': bt['description'] ?? bt['category'] ?? txType,
+                  'transaction_date': bt['transaction_date'],
+                  'transaction_type': txType,
+                  'updated_at': DateTime.now().toIso8601String(),
+                })
+                .eq('id', bt['financial_transaction_id'] as String);
+          } catch (_) {}
+          return true;
+        }
+
+        final txType = bt['transaction_type'] == 'revenue'
+            ? 'business_income'
+            : 'business_expense';
+
+        final ft = await _client
+            .from('financial_transactions')
+            .insert({
+              'user_id': userId,
+              'transaction_type': txType,
+              'category': bt['category'] ?? txType,
+              'amount': bt['amount'],
+              'description': bt['description'] ?? bt['category'] ?? txType,
+              'transaction_date': bt['transaction_date'],
+              'related_business_id': bt['business_id'],
+              'status': 'completed',
+              'currency': 'TZS',
+              'is_archived': false,
+              'title':
+                  '${bt['transaction_type'] == 'revenue' ? 'Revenue' : 'Expense'}: ${bt['category'] ?? ''}',
+            })
+            .select()
+            .single();
+
+        // Link the financial transaction back to the business transaction
+        try {
+          await _client
+              .from('business_transactions')
+              .update({'financial_transaction_id': ft['id']})
+              .eq('id', businessTransactionId);
+        } catch (_) {}
+
+        return true;
+      } catch (e) {
+        return false;
+      }
     }
   }
 
@@ -391,10 +456,57 @@ class EnterpriseTransactionService {
           .select()
           .single();
 
-      // Sync to financial ledger
+      // Sync to financial ledger — creates entry in financial_transactions
+      // This ensures the transaction appears in the Enterprise Transaction Engine
       await syncBusinessTransactionToLedger(bt['id'] as String);
+
+      // Also create a direct financial_transactions entry linked to the business
+      // as a backup to ensure it always appears in business transaction history
+      try {
+        final txType = type == 'revenue'
+            ? 'business_income'
+            : 'business_expense';
+        final existing = await _client
+            .from('financial_transactions')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('related_business_id', businessId)
+            .eq('transaction_date', date.toIso8601String().split('T')[0])
+            .eq('amount', amount)
+            .eq('transaction_type', txType)
+            .limit(1);
+        if ((existing as List).isEmpty) {
+          // No duplicate found — the sync above should have created it
+          // If not, create it now
+          final btUpdated = await _client
+              .from('business_transactions')
+              .select('financial_transaction_id')
+              .eq('id', bt['id'] as String)
+              .maybeSingle();
+          if (btUpdated == null ||
+              btUpdated['financial_transaction_id'] == null) {
+            await _client.from('financial_transactions').insert({
+              'user_id': userId,
+              'transaction_type': txType,
+              'category': category,
+              'amount': amount,
+              'description': description ?? category,
+              'transaction_date': date.toIso8601String().split('T')[0],
+              'related_business_id': businessId,
+              'status': 'completed',
+              'currency': 'TZS',
+              'is_archived': false,
+              'title':
+                  '${type == 'revenue' ? 'Revenue' : 'Expense'}: $category',
+            });
+          }
+        }
+      } catch (_) {
+        // Backup sync failed — primary sync may have succeeded
+      }
+
       return true;
-    } catch (_) {
+    } catch (e) {
       return false;
     }
   }
@@ -409,7 +521,7 @@ class EnterpriseTransactionService {
           .update({...updates, 'updated_at': DateTime.now().toIso8601String()})
           .eq('id', btId);
 
-      // Re-sync to ledger
+      // Re-sync to ledger: update the linked financial transaction
       final bt = await _client
           .from('business_transactions')
           .select(
@@ -432,6 +544,9 @@ class EnterpriseTransactionService {
               'updated_at': DateTime.now().toIso8601String(),
             })
             .eq('id', bt['financial_transaction_id'] as String);
+      } else if (bt != null) {
+        // No linked transaction yet — create one now
+        await syncBusinessTransactionToLedger(btId);
       }
       return true;
     } catch (_) {
@@ -441,7 +556,7 @@ class EnterpriseTransactionService {
 
   Future<bool> deleteBusinessTransaction(String btId) async {
     try {
-      // Get linked financial transaction
+      // Get linked financial transaction before deleting
       final bt = await _client
           .from('business_transactions')
           .select('financial_transaction_id')
@@ -451,7 +566,7 @@ class EnterpriseTransactionService {
       // Delete from business_transactions
       await _client.from('business_transactions').delete().eq('id', btId);
 
-      // Delete linked financial transaction
+      // Delete linked financial transaction if it exists
       if (bt != null && bt['financial_transaction_id'] != null) {
         await _client
             .from('financial_transactions')

@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../core/app_export.dart';
 import '../../services/enterprise_transaction_service.dart';
 import '../../services/finance_service.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/cna_shared_components.dart';
+import '../../widgets/custom_icon_widget.dart';
 
 class EnterpriseTransactionScreen extends StatefulWidget {
   const EnterpriseTransactionScreen({super.key});
@@ -505,6 +507,9 @@ class _EnterpriseTransactionScreenState
       text: tx['description'] as String? ?? '',
     );
     final titleCtrl = TextEditingController(text: tx['title'] as String? ?? '');
+    DateTime selectedDate =
+        DateTime.tryParse(tx['transaction_date'] as String? ?? '') ??
+        DateTime.now();
     bool isSaving = false;
 
     showModalBottomSheet(
@@ -663,6 +668,50 @@ class _EnterpriseTransactionScreenState
                     ),
                   ),
                 ),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: selectedDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (picked != null) {
+                      setSheet(() => selectedDate = picked);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppTheme.outlineLight),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const CustomIconWidget(
+                          iconName: 'calendar_today',
+                          size: 18,
+                          color: AppTheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                          style: GoogleFonts.plusJakartaSans(fontSize: 14),
+                        ),
+                        const Spacer(),
+                        const Icon(
+                          Icons.edit_outlined,
+                          size: 14,
+                          color: AppTheme.mutedLight,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 20),
                 Row(
                   children: [
@@ -705,6 +754,9 @@ class _EnterpriseTransactionScreenState
                                       'title': titleCtrl.text.isEmpty
                                           ? null
                                           : titleCtrl.text,
+                                      'transaction_date': selectedDate
+                                          .toIso8601String()
+                                          .split('T')[0],
                                     });
                                 if (ctx.mounted) Navigator.pop(ctx);
                                 _loadData();

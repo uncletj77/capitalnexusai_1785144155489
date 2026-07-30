@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../core/app_export.dart';
 import '../../services/master_asset_registry_service.dart';
 import '../../services/supabase_service.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/custom_icon_widget.dart';
 
 class BusinessDashboardScreen extends StatefulWidget {
   const BusinessDashboardScreen({super.key});
@@ -406,6 +408,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
                     setState(() => _selectedBusiness = biz);
                     _loadBusinessData(biz['id'] as String);
                   },
+                  onLongPress: () => _showEditBusinessSheet(biz),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     width: 130,
@@ -528,6 +531,19 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
               ],
             ),
           ),
+          // Options button — always visible
+          GestureDetector(
+            onTap: () => _showEditBusinessSheet(biz),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(30),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.more_vert, color: Colors.white, size: 18),
+            ),
+          ),
+          const SizedBox(width: 6),
           GestureDetector(
             onTap: () => context
                 .push('/business-profile', extra: biz)

@@ -272,6 +272,21 @@ class LoanRepository {
     }
   }
 
+  Future<bool> deleteLoan(String loanId) async {
+    final userId = _userId;
+    if (userId == null) throw LoanException('User not authenticated');
+    try {
+      await _client
+          .from('loans')
+          .delete()
+          .eq('id', loanId)
+          .eq('user_id', userId);
+      return true;
+    } catch (e) {
+      throw LoanException('Failed to delete loan: $e');
+    }
+  }
+
   // ─── REPAYMENTS ───────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getLoanRepayments(String loanId) async {
@@ -360,7 +375,7 @@ class LoanRepository {
         await AccountingEngine.instance.recordLoanRepayment(
           principalAmount: principal,
           interestAmount: interest,
-          loanName: loan!['loan_name'] ?? 'Loan',
+          loanName: loan['loan_name'] ?? 'Loan',
           date: paymentDate,
           loanId: loanId,
           currency: loan['currency'] ?? 'TZS',
@@ -371,7 +386,7 @@ class LoanRepository {
       try {
         await EnterpriseTransactionService.instance.createTransaction(
           type: 'loan_repayment',
-          category: loan!['loan_category'] ?? 'personal',
+          category: loan['loan_category'] ?? 'personal',
           amount: amount,
           date: paymentDate,
           title: 'Loan Repayment: ${loan['loan_name']}',

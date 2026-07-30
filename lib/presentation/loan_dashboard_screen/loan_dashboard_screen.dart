@@ -833,6 +833,7 @@ class _LoanDashboardScreenState extends State<LoanDashboardScreen> {
 
     return GestureDetector(
       onTap: () => context.push(AppRoutes.loanDetailsScreen, extra: loan),
+      onLongPress: () => _showLoanOptions(loan),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(14),
@@ -880,6 +881,24 @@ class _LoanDashboardScreenState extends State<LoanDashboardScreen> {
                     ],
                   ),
                 ),
+                // Edit/options button
+                GestureDetector(
+                  onTap: () => _showLoanOptions(loan),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceLight,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.outlineLight),
+                    ),
+                    child: const Icon(
+                      Icons.more_vert,
+                      size: 16,
+                      color: AppTheme.mutedLight,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -946,6 +965,176 @@ class _LoanDashboardScreenState extends State<LoanDashboardScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showLoanOptions(Map<String, dynamic> loan) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: AppTheme.surfaceLight,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Loan Options',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            Text(
+              loan['loan_name'] as String? ?? '',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppTheme.mutedLight),
+            ),
+            const SizedBox(height: 16),
+            _loanOptionTile(
+              Icons.edit_outlined,
+              'Edit Loan',
+              AppTheme.primary,
+              () {
+                Navigator.pop(context);
+                context
+                    .push(AppRoutes.addLoanScreen, extra: loan)
+                    .then((_) => _loadData());
+              },
+            ),
+            _loanOptionTile(
+              Icons.payments_outlined,
+              'View Details',
+              AppTheme.success,
+              () {
+                Navigator.pop(context);
+                context.push(AppRoutes.loanDetailsScreen, extra: loan);
+              },
+            ),
+            _loanOptionTile(
+              Icons.archive_outlined,
+              'Archive Loan',
+              AppTheme.mutedLight,
+              () async {
+                Navigator.pop(context);
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    title: const Text('Archive Loan'),
+                    content: const Text(
+                      'This loan will be archived. All records will be preserved.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(c, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(c, true),
+                        child: const Text(
+                          'Archive',
+                          style: TextStyle(color: AppTheme.error),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  await _loanRepo.updateLoan(loan['id'] as String, {
+                    'status': 'closed',
+                  });
+                  _loadData();
+                }
+              },
+            ),
+            _loanOptionTile(
+              Icons.delete_outline,
+              'Delete Loan',
+              AppTheme.error,
+              () async {
+                Navigator.pop(context);
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    title: const Text('Delete Loan'),
+                    content: const Text(
+                      'This will permanently delete the loan record.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(c, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(c, true),
+                        child: const Text(
+                          'Delete',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  try {
+                    await _loanRepo.deleteLoan(loan['id'] as String);
+                    _loadData();
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Delete failed: $e'),
+                          backgroundColor: AppTheme.error,
+                        ),
+                      );
+                    }
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _loanOptionTile(
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return ListTile(
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: color.withAlpha(20),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: color, size: 18),
+      ),
+      title: Text(
+        label,
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+      ),
+      onTap: onTap,
+      contentPadding: EdgeInsets.zero,
     );
   }
 

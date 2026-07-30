@@ -38,6 +38,7 @@ import '../presentation/add_business_screen/add_business_screen.dart';
 import '../presentation/branch_management_screen/branch_management_screen.dart';
 import '../presentation/employee_management_screen/employee_management_screen.dart';
 import '../presentation/business_transactions_screen/business_transactions_screen.dart';
+import '../presentation/business_reports_screen/business_reports_screen.dart';
 import '../presentation/ai_business_advisor_screen/ai_business_advisor_screen.dart';
 // Investment Intelligence Engine screens
 import '../presentation/investment_dashboard_screen/investment_dashboard_screen.dart';
@@ -543,7 +544,9 @@ final GoRouter appRouter = GoRouter(
       path: AppRoutes.addLoanScreen,
       pageBuilder: (context, state) => CustomTransitionPage(
         key: state.pageKey,
-        child: AddLoanScreen(),
+        child: AddLoanScreen(
+          existingLoan: state.extra as Map<String, dynamic>?,
+        ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) =>
             SlideTransition(
               position:
@@ -844,7 +847,7 @@ final GoRouter appRouter = GoRouter(
       path: AppRoutes.businessReportsScreen,
       pageBuilder: (context, state) => CustomTransitionPage(
         key: state.pageKey,
-        child: BusinessTransactionsScreen(
+        child: BusinessReportsScreen(
           business: state.extra as Map<String, dynamic>?,
         ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) =>
