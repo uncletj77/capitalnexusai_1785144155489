@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../core/app_export.dart';
+import '../routes/app_routes.dart';
+import '../theme/app_theme.dart';
+import './custom_icon_widget.dart';
 
 /// CNA Module Navigation Drawer
 /// Provides unified navigation across all CNA modules.
@@ -97,6 +100,11 @@ class CnaModuleDrawer extends StatelessWidget {
                       'Finance Dashboard',
                       'account_balance',
                       AppRoutes.financeDashboardScreen,
+                    ),
+                    _NavItem(
+                      'Finance Module',
+                      'menu_book',
+                      AppRoutes.financeModuleScreen,
                     ),
                     _NavItem(
                       'Accounts',

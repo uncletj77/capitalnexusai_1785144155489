@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_export.dart';
-import '../../services/supabase_service.dart';
+import '../../repositories/loan_repository.dart';
+import '../../routes/app_routes.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/cna_shared_components.dart';
 
 class LoanDashboardScreen extends StatefulWidget {
@@ -12,7 +14,7 @@ class LoanDashboardScreen extends StatefulWidget {
 }
 
 class _LoanDashboardScreenState extends State<LoanDashboardScreen> {
-  final _client = SupabaseService.client;
+  final _loanRepo = LoanRepository.instance;
   bool _isLoading = true;
   List<Map<String, dynamic>> _loans = [];
   List<Map<String, dynamic>> _repayments = [];
@@ -51,38 +53,34 @@ class _LoanDashboardScreenState extends State<LoanDashboardScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final userId = _client.auth.currentUser?.id;
-      if (userId == null) {
-        setState(() => _isLoading = false);
-        return;
+      final loans = await _loanRepo.getLoans();
+      final repayments = <Map<String, dynamic>>[];
+      for (final loan in loans.take(5)) {
+        final reps = await _loanRepo.getLoanRepayments(loan['id'] as String);
+        repayments.addAll(reps.take(4));
       }
-
-      final loansRes = await _client
-          .from('loans')
-          .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: false);
-      final repaymentsRes = await _client
-          .from('loan_repayments')
-          .select()
-          .eq('user_id', userId)
-          .order('payment_date', ascending: false)
-          .limit(20);
-      final healthRes = await _client
-          .from('debt_health_snapshots')
-          .select()
-          .eq('user_id', userId)
-          .order('snapshot_date', ascending: false)
-          .limit(1);
+      final healthSnapshots = await _loanRepo.getDebtHealthSnapshots(limit: 1);
 
       setState(() {
-        _loans = List<Map<String, dynamic>>.from(loansRes);
-        _repayments = List<Map<String, dynamic>>.from(repaymentsRes);
-        _healthSnapshot = healthRes.isNotEmpty ? healthRes.first : null;
+        _loans = loans;
+        _repayments = repayments;
+        _healthSnapshot = healthSnapshots.isNotEmpty
+            ? healthSnapshots.first
+            : null;
         _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to load loans: ${e.toString().replaceAll('LoanException: ', '')}',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

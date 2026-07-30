@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_export.dart';
+import '../../repositories/loan_repository.dart';
 import '../../services/supabase_service.dart';
+import '../../theme/app_theme.dart';
 
 class AddLoanScreen extends StatefulWidget {
   final Map<String, dynamic>? existingLoan;
@@ -12,6 +14,7 @@ class AddLoanScreen extends StatefulWidget {
 }
 
 class _AddLoanScreenState extends State<AddLoanScreen> {
+  final _loanRepo = LoanRepository.instance;
   final _client = SupabaseService.client;
   final _pageController = PageController();
   int _currentStep = 0;
@@ -144,47 +147,51 @@ class _AddLoanScreenState extends State<AddLoanScreen> {
   Future<void> _saveLoan() async {
     setState(() => _isSaving = true);
     try {
-      final userId = _client.auth.currentUser?.id;
-      if (userId == null) return;
-
       final principal = double.tryParse(_principalCtrl.text) ?? 0;
       final monthly = double.tryParse(_monthlyPaymentCtrl.text) ?? 0;
-      final endDate = DateTime(
-        _startDate.year,
-        _startDate.month + (int.tryParse(_termCtrl.text) ?? 12),
-        _startDate.day,
-      );
+      final interestRate = double.tryParse(_interestRateCtrl.text) ?? 0;
+      final termMonths = int.tryParse(_termCtrl.text) ?? 12;
 
-      final data = {
-        'user_id': userId,
-        'loan_name': _loanNameCtrl.text.trim(),
-        'lender': _lenderCtrl.text.trim(),
-        'loan_category': _loanCategory,
-        'purpose': _purpose,
-        'principal_amount': principal,
-        'currency': 'TZS',
-        'interest_rate': double.tryParse(_interestRateCtrl.text) ?? 0,
-        'interest_type': _interestType,
-        'loan_term_months': int.tryParse(_termCtrl.text) ?? 12,
-        'start_date': _startDate.toIso8601String().split('T')[0],
-        'end_date': endDate.toIso8601String().split('T')[0],
-        'payment_frequency': _paymentFrequency,
-        'monthly_payment': monthly,
-        'remaining_balance': principal,
-        'next_due_date': _nextDueDate?.toIso8601String().split('T')[0],
-        'payment_method': _paymentMethod,
-        'collateral_asset_id': _selectedCollateralId,
-        'notes': _notesCtrl.text.trim(),
-        'status': 'active',
-      };
+      if (_loanNameCtrl.text.trim().isEmpty) {
+        throw Exception('Loan name is required');
+      }
+      if (principal <= 0) throw Exception('Principal amount must be positive');
 
       if (widget.existingLoan != null) {
-        await _client
-            .from('loans')
-            .update(data)
-            .eq('id', widget.existingLoan!['id']);
+        await _loanRepo.updateLoan(widget.existingLoan!['id'] as String, {
+          'loan_name': _loanNameCtrl.text.trim(),
+          'lender': _lenderCtrl.text.trim(),
+          'loan_category': _loanCategory,
+          'purpose': _purpose,
+          'principal_amount': principal,
+          'interest_rate': interestRate,
+          'interest_type': _interestType,
+          'loan_term_months': termMonths,
+          'payment_frequency': _paymentFrequency,
+          'monthly_payment': monthly,
+          'next_due_date': _nextDueDate?.toIso8601String().split('T')[0],
+          'payment_method': _paymentMethod,
+          'collateral_asset_id': _selectedCollateralId,
+          'notes': _notesCtrl.text.trim(),
+        });
       } else {
-        await _client.from('loans').insert(data);
+        await _loanRepo.createLoan(
+          loanName: _loanNameCtrl.text.trim(),
+          lender: _lenderCtrl.text.trim(),
+          loanCategory: _loanCategory,
+          purpose: _purpose,
+          principalAmount: principal,
+          interestRate: interestRate,
+          interestType: _interestType,
+          loanTermMonths: termMonths,
+          paymentFrequency: _paymentFrequency,
+          monthlyPayment: monthly,
+          paymentMethod: _paymentMethod,
+          startDate: _startDate,
+          nextDueDate: _nextDueDate,
+          collateralAssetId: _selectedCollateralId,
+          notes: _notesCtrl.text.trim(),
+        );
       }
 
       if (mounted) {
@@ -203,7 +210,15 @@ class _AddLoanScreenState extends State<AddLoanScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+          SnackBar(
+            content: Text(
+              e
+                  .toString()
+                  .replaceAll('LoanException: ', '')
+                  .replaceAll('Exception: ', ''),
+            ),
+            backgroundColor: AppTheme.error,
+          ),
         );
       }
     } finally {

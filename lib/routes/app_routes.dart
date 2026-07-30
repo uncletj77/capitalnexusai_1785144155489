@@ -12,6 +12,7 @@ import '../presentation/profile_settings_screen/profile_settings_screen.dart';
 import '../presentation/security_dashboard_screen/security_dashboard_screen.dart';
 import '../presentation/organization_dashboard_screen/organization_dashboard_screen.dart';
 import '../presentation/finance_dashboard_screen/finance_dashboard_screen.dart';
+import '../presentation/finance_module_screen/finance_module_screen.dart';
 import '../presentation/accounts_screen/accounts_screen.dart';
 import '../presentation/budget_planner_screen/budget_planner_screen.dart';
 import '../presentation/financial_goals_screen/financial_goals_screen.dart';
@@ -92,6 +93,7 @@ class AppRoutes {
   static const String budgetPlannerScreen = '/budget-planner';
   static const String financialGoalsScreen = '/financial-goals';
   static const String netWorthScreen = '/net-worth';
+  static const String financeModuleScreen = '/finance-module';
   // Asset Intelligence Engine routes
   static const String assetDashboardScreen = '/asset-dashboard';
   static const String addAssetScreen = '/add-asset';
@@ -1670,6 +1672,22 @@ final GoRouter appRouter = GoRouter(
               child: child,
             ),
         transitionDuration: const Duration(milliseconds: 300),
+      ),
+    ),
+    GoRoute(
+      path: AppRoutes.financeModuleScreen,
+      pageBuilder: (context, state) => CustomTransitionPage(
+        key: state.pageKey,
+        child: const FinanceModuleScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            FadeTransition(
+              opacity: CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+              ),
+              child: child,
+            ),
+        transitionDuration: const Duration(milliseconds: 280),
       ),
     ),
   ],
